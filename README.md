@@ -30,46 +30,41 @@ mirage-proxy/
 └── README              # Este ficheiro
 ```
 
-## Instalação (ex.: umbrelOS)
+## Instalação (Docker local)
 
-1. Copiar o projeto para o servidor:
+Estas instruções explicam como executar o proxy localmente usando Docker e `docker compose`.
 
-```bash
-scp -r mirage-proxy/ umbrel@<IP_DO_UMBREL>:~/
-```
-
-2. Aceder por SSH e entrar na pasta:
+1. Copia o repositório para a tua máquina local (ou abre a pasta onde o código está):
 
 ```bash
-ssh umbrel@<IP_DO_UMBREL>
-cd ~/mirage-proxy
+git clone <repo-url>    # ou usa uma cópia local
+cd mirage-proxy
 ```
 
-3. Configurar variáveis de ambiente
+2. Copia o ficheiro de exemplo e edita as variáveis de ambiente (define `IAEDU_API_KEY`):
 
 ```bash
 cp .env.example .env
-nano .env
+# edita .env com o teu editor preferido
 ```
 
-Preenche `IAEDU_API_KEY` com a tua chave real (`sk-usr-...`).
-
-4. Build e arranque do container
+3. Executar com Docker Compose
 
 ```bash
 docker compose up -d --build
 ```
 
-5. Ver logs
+4. Verificar logs e estado
 
 ```bash
 docker compose logs -f
+docker compose ps
 ```
 
-6. Healthcheck
+5. Testar o healthcheck localmente
 
 ```bash
-curl http://<IP_DO_UMBREL>:3000/health
+curl http://localhost:3000/health
 # Resposta esperada: {"status":"ok"}
 ```
 
@@ -81,7 +76,6 @@ curl http://<IP_DO_UMBREL>:3000/health
 | `PORT` | Não | `3000` | Porta do servidor Express |
 | `IAEDU_ENDPOINT` | Não | `.../agent/fgh/stream` | URL completo do endpoint da IAEdu |
 | `CHANNEL_ID` | Não | `fgh` | ID do canal associado ao agente |
-| `THREAD_ID` | Não | - | Ignorado pelo proxy (substituído por UUID) |
 
 ## Endpoints expostos
 
@@ -127,6 +121,3 @@ docker compose ps         # Estado do container
 
 Se o texto for gerado token a token, a integração está funcional.
 
----
-
-Se quiseres, posso renomear para `README.md` e abrir um PR com a alteração.
