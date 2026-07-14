@@ -24,10 +24,10 @@ mirage-proxy/
 ├── server.js           # Lógica do proxy (Express + tradutor de streams)
 ├── package.json        # Dependências Node
 ├── Dockerfile          # Imagem Node (Alpine)
-├── docker-compose.yml  # Orquestração para umbrelOS
+├── docker-compose.yml  # Orquestração Docker
 ├── .env.example        # Template de variáveis de ambiente
 ├── .gitignore
-└── README              # Este ficheiro
+└── README.md           # Este ficheiro
 ```
 
 ## Instalação (Docker local)
@@ -96,6 +96,28 @@ curl http://localhost:3000/health
 - Cancelamento upstream: cancelar localmente fecha a ligação, mas a IAEdu pode continuar a processar a geração nos seus servidores.
 - Segurança local: o proxy não exige autenticação por omissão — mantenha-o restrito à LAN.
 
+## Gestão de memória e contexto
+
+O proxy foi desenhado para dar **controlo total da memória ao editor de código**:
+
+- Cada pedido gera um `thread_id` aleatório (UUID) via `crypto.randomUUID()`. A IAEdu trata cada chamada como uma conversa nova (stateless do lado deles).
+- Todo o histórico da conversa que o editor mantém é serializado pelo proxy e enviado como uma única mensagem à IAEdu, no formato:
+
+```
+Utilizador: [primeira mensagem do utilizador]
+
+Assistente: [resposta do assistente]
+
+Utilizador: [segunda mensagem do utilizador]
+
+...
+```
+
+**Consequência prática:**
+- Quando clicas em **"New Chat"** no editor → contexto realmente limpo.
+- Quando continuas uma conversa → o modelo recebe todo o histórico e mantém coerência.
+- Não há "conversas fantasma" a serem retomadas entre sessões.
+
 ## Comandos úteis (Docker)
 
 ```bash
@@ -115,7 +137,7 @@ docker compose ps         # Estado do container
 
 ## Teste rápido com OpenCode
 
-1. Em OpenCode adiciona um Provedor Personalizado apontando para `http://<IP_DO_UMBREL>:3000/v1`.
+1. Em OpenCode adiciona um Provedor Personalizado apontando para `http://<IP_DO_SERVIDOR>:3000/v1`.
 2. Usa chave `dummy` (o proxy ignora e usa `IAEDU_API_KEY`).
 3. Cria o modelo `claude-opus` no provedor e pede: `Diz "olá mundo" em JavaScript.`
 
