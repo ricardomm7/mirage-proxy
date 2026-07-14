@@ -1,0 +1,9 @@
+services:
+  mirage-proxy:
+    build: .
+    container_name: mirage-proxy
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    restart: unless-stopped

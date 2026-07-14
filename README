@@ -1,0 +1,36 @@
+Mirage ProxyServidor proxy local que serve de ponte entre assistentes de código AI (OpenCode, Cursor, Continue.dev, Cline) e a API proprietária do LLM Claude Opus 4.7 fornecido pela IAEdu.Traduz pedidos no formato OpenAI (JSON para /v1/chat/completions) para o formato exigido pela IAEdu (multipart/form-data com stream NDJSON), e converte a resposta de volta para Server-Sent Events compatíveis com a norma OpenAI.O Problema que ResolveA API da IAEdu não é compatível com o standard OpenAI utilizado pelos editores de código. O proxy atua como um tradutor em tempo real entre estes dois mundos:Standard OpenAI (Editores AI)API IAEdu (O que o endpoint exige)Content-Type: application/jsonContent-Type: multipart/form-dataPayload: Corpo JSON com messages: [...]Payload: Formulário com channel_id, thread_id, messageResposta: Stream SSE {"choices":[{"delta":...}]}Resposta: Stream NDJSON {"type":"token","content":"..."}Nenhum editor de código AI (OpenCode, Cursor, Continue.dev) suporta nativamente o formato da IAEdu. O uso deste proxy é obrigatório para a integração.ArquiteturaPlaintext┌─────────────┐      JSON       ┌──────────────┐   multipart/form-data   ┌──────────────┐
+│   OpenCode  │ ──────────────► │ Mirage Proxy │ ──────────────────────► │  IAEdu API   │
+│  (ou outro) │ ◄────────────── │  (Docker)    │ ◄────────────────────── │ Claude Opus  │
+└─────────────┘   SSE OpenAI    └──────────────┘   NDJSON stream         └──────────────┘
+Estrutura do ProjetoPlaintextmirage-proxy/
+├── server.js           # Lógica do proxy (Express + tradutor de streams)
+├── package.json        # Dependências Node
+├── Dockerfile          # Imagem Alpine Node 20
+├── docker-compose.yml  # Orquestração para umbrelOS
+├── .env.example        # Template de variáveis de ambiente
+├── .gitignore
+└── README.md
+Instalação no umbrelOS via SSH1. Copiar o projeto para o homelab:A partir do teu computador local, envia a pasta do projeto:Bashscp -r mirage-proxy/ umbrel@<IP_DO_UMBREL>:~/
+2. Entrar no umbrelOS por SSH:Bashssh umbrel@<IP_DO_UMBREL>
+cd ~/mirage-proxy
+3. Configurar as variáveis de ambiente:Preenche a IAEDU_API_KEY com a tua chave real (sk-usr-...).Bashcp .env.example .env
+nano .env
+4. Build e arranque do container:Bashdocker compose up -d --build
+5. Verificar se está a correr:Bashdocker compose logs -f
+Deverás ver no terminal:Mirage proxy running on port 3000Forwarding to: [https://api.iaedu.pt/agent-chat/api/v1/agent/fgh/stream](https://api.iaedu.pt/agent-chat/api/v1/agent/fgh/stream)6. Testar o healthcheck:Abre um novo terminal e corre:Bashcurl http://<IP_DO_UMBREL>:3000/health
+# Resposta esperada: {"status":"ok"}
+Configuração no OpenCodeNas definições do OpenCode, cria um Provedor Personalizado (Custom Provider) com os seguintes valores:CampoO que deves preencherID do Provedoriaedu-homelabNome de exibiçãoClaude Opus (IAEdu Homelab)URL Base / Endpointhttp://<IP_DO_UMBREL>:3000/v1Chave de APIdummy (O proxy ignora este valor e usa a chave do .env)Cabeçalhos(Deixar completamente vazio)Adiciona o modelo dentro deste provedor:CampoValorIDclaude-opusNomeClaude Opus 4.7Teste RápidoNo OpenCode, seleciona o modelo Claude Opus (IAEdu Homelab) e escreve: "Diz 'olá mundo' em JavaScript."Se o código aparecer letra a letra no ecrã, a integração foi concluída com sucesso.Gestão de Contexto e MemóriaO proxy foi desenhado para transferir o controlo total da memória da IAEdu para o OpenCode:Cada pedido ao proxy gera um thread_id aleatório (UUID), forçando a IAEdu a tratar cada interação como uma conversa nova (stateless).Todo o histórico da conversa mantido pelo OpenCode é serializado e enviado como uma única mensagem detalhada (Utilizador: / Assistente:).Quando clicas em "New Chat", o contexto é verdadeiramente limpo. Se continuares a conversar, o Claude recebe o histórico e mantém a coerência.Limitações ImportantesSem Tool Calling (Edição de ficheiros autónoma): O Claude não consegue editar os teus ficheiros diretamente. O endpoint web da IAEdu aceita apenas texto e devolve apenas tokens, não suportando a injeção de ferramentas (tools). Usa o OpenCode no modo Chat, pede o código, e usa o botão "Apply" para aplicar as alterações manualmente no ficheiro.Sem multimodalidade: O proxy extrai apenas as partes de texto das mensagens. Imagens anexadas no editor serão descartadas antes do envio para a API.Modelo único: O campo model escolhido no OpenCode é ignorado. O proxy encaminha sempre os pedidos para o CHANNEL_ID configurado no ficheiro .env.Sem contagem de tokens: A resposta convertida pelo proxy não inclui dados de usage (prompt_tokens, completion_tokens).Cancelamento Upstream: Se cancelares a geração de código a meio no OpenCode, o proxy fecha a ligação localmente, mas a API da IAEdu pode continuar a processar os dados nos seus servidores até concluir.Segurança Local: O proxy aceita qualquer pedido que chegue à porta 3000 sem autenticação. Mantém a aplicação restrita à tua rede local (LAN) e nunca a exponhas diretamente à internet pública.Variáveis de AmbienteVariávelObrigatóriaDefaultDescriçãoIAEDU_API_KEYSim-A tua chave x-api-key da IAEdu (sk-usr-...)PORTNão3000Porta em que o servidor Express vai escutarIAEDU_ENDPOINTNão.../agent/fgh/streamURL completo de destino da APICHANNEL_IDNãofghID do canal associado ao agenteTHREAD_IDNão-Ignorado (o script sobrepõe com um UUID aleatório)Comandos Úteis (Docker)Bash# Ver logs em tempo real
+docker compose logs -f
+
+# Reiniciar o serviço (necessário após alterar o .env)
+docker compose restart
+
+# Parar a execução
+docker compose down
+
+# Reconstruir a imagem após alterar o server.js
+docker compose up -d --build
+
+# Ver o estado do container
+docker compose ps
+Debug EssencialHealthcheck local: Correr curl http://<IP>:3000/health tem de devolver {"status":"ok"}. Se falhar, o container não está a correr.Verificar Pedidos: Observa os logs (docker compose logs -f). Vais ver os pedidos a chegar do OpenCode e possíveis erros devolvidos pela API.Sem Ligação: Se o pedido não chega ao proxy, verifica a firewall do umbrelOS e confirma se a porta 3000:3000 está mapeada no docker-compose.yml.Erro 401 ou 403: A tua variável IAEDU_API_KEY no ficheiro .env está incorreta ou expirada.Ecrã em branco no Editor: O formato de stream da IAEdu pode ter sido atualizado. Verifica os logs para confirmar se o JSON recebido ainda possui a estrutura {"type":"token","content":"..."}.Endpoints ExpostosMétodoRotaDescriçãoPOST/v1/chat/completionsEndpoint principal de chat (Compatível com OpenAI)POST/chat/completionsAlias seguro sem o prefixo /v1GET/v1/modelsLista de modelos mock (Necessário para a validação de alguns editores)GET/modelsAlias seguro sem o prefixo /v1GET/healthHealthcheck simples de serviço

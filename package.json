@@ -1,0 +1,19 @@
+{
+  "name": "mirage-proxy",
+  "version": "1.0.0",
+  "description": "Proxy server bridging AI coding assistants with IAEdu LLM API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "express": "^4.21.0",
+    "form-data": "^4.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
